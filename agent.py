@@ -1,6 +1,7 @@
 import sys, os
 sys.path.append(os.getcwd())
 from agno.agent import Agent
+from agno.models.lmstudio import LMStudio
 from agno.models.openai import OpenAILike
 from agno.db.sqlite import SqliteDb
 from service_list.tools.service import ServiceTools
