@@ -6,7 +6,7 @@ NEO4J_DATABASE = "service-list"
 import json, os
 from neo4j import GraphDatabase, Driver
 from tqdm import tqdm
-from service_list.utils.utils import ask_llm
+from utils.utils import ask_llm
 from loguru import logger
 
 

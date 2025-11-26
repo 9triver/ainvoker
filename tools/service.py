@@ -1,4 +1,7 @@
-import os
+import os, sys
+
+sys.path.append(os.getcwd())
+
 import numpy as np
 from typing import List, Dict, Union, Any, Optional
 from cn2an import an2cn
@@ -7,25 +10,26 @@ from agno.tools import Toolkit
 from neo4j import GraphDatabase
 from sklearn.metrics.pairwise import cosine_similarity
 from haystack import Document
-from haystack.components.embedders import SentenceTransformersTextEmbedder
 from neo4j_haystack.document_stores import Neo4jDocumentStore
+from utils.utils import lm_studio_embedding
 from loguru import logger
 
 
 class ServiceTools(Toolkit):
     def __init__(
         self,
-        uri: Optional[str] = None,
-        user: Optional[str] = None,
-        password: Optional[str] = None,
-        database: Optional[str] = None,
-        embedding_model: str = None,
+        uri: str,
+        user: str,
+        password: str,
+        database: str,
+        base_url: str,
+        embedding_model: str,
         enable_search_interfaces: bool = False,
         all: bool = False,
         **kwargs,
     ):
+        self.base_url = base_url
         self.embedding_model = embedding_model
-        self.text_embedder = None
         self.document_store = None
 
         self.uri = uri or os.getenv("NEO4J_URI", "bolt://localhost:7687")
@@ -54,21 +58,18 @@ class ServiceTools(Toolkit):
         node_label: str,
         top_k,
     ) -> List[Document]:
-        if self.text_embedder is None:
-            self.text_embedder = SentenceTransformersTextEmbedder(
-                model=self.embedding_model
-            )
-            self.text_embedder.warm_up()
         if self.document_store is None:
             self.document_store = Neo4jDocumentStore(
                 url=self.uri,
                 database=self.database,
                 username=self.user,
                 password=self.password,
-                embedding_dim=self.text_embedder.embedding_backend.model.get_sentence_embedding_dimension(),
+                embedding_dim=4096,
             )
 
-        entity_embedding = self.text_embedder.run(text=text)["embedding"]
+        entity_embedding = lm_studio_embedding(
+            base_url=self.base_url, text=text, model=self.embedding_model
+        )
         self.document_store.node_label = node_label
         self.document_store.index = f"{node_label}-embedding"
         documents = self.document_store.query_by_embedding(
@@ -113,7 +114,11 @@ class ServiceTools(Toolkit):
         if not interfaces:
             return []
         task_embedding = np.array(
-            self.text_embedder.run(text=task_description)["embedding"]
+            lm_studio_embedding(
+                base_url=self.base_url,
+                model=self.embedding_model,
+                text=task_description,
+            )
         ).reshape(1, -1)
         interface_ids = [s["id"] for s in interfaces]
 

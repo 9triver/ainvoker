@@ -2,8 +2,8 @@ import sys, os, time
 
 sys.path.append(os.getcwd())
 from tqdm import tqdm
-from service_list.tools.service import ServiceTools
-from service_list.utils.utils import ask_llm
+from tools.service import ServiceTools
+from utils.utils import ask_llm
 from loguru import logger
 
 

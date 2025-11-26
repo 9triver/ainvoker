@@ -1,7 +1,7 @@
 import sys, os
 
 sys.path.append(os.getcwd())
-from service_list.utils.utils import read_excel, to_json
+from utils.utils import read_excel, to_json
 from neo4j import GraphDatabase, Driver
 from tqdm import tqdm
 from loguru import logger

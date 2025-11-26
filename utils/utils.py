@@ -1,3 +1,5 @@
+import requests
+import json
 import pandas as pd
 import numpy as np
 
@@ -114,3 +116,9 @@ def ask_llm(
         .message.content
     )
     return response
+
+
+def lm_studio_embedding(base_url: str, model: str, text: str):
+    client = OpenAI(base_url=base_url, api_key="lm-studio")
+    embedding = client.embeddings.create(input=text, model=model).data[0].embedding
+    return embedding
