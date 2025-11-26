@@ -1,0 +1,12 @@
+agno==2.2.6
+haystack-ai==2.20.0
+neo4j_haystack==2.2.1
+neo4j==6.0.3
+openai==2.8.1
+sentence_transformers==5.1.2
+scikit_learn==1.7.2
+tqdm==4.67.1
+cn2an==0.5.23
+loguru==0.7.3
+numpy==2.3.5
+pandas==2.3.3
