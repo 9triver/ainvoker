@@ -4,7 +4,7 @@ sys.path.append(os.getcwd())
 import numpy as np
 from neo4j import GraphDatabase, Driver
 from neo4j_haystack.document_stores import Neo4jDocumentStore
-from utils.utils import lm_studio_embedding
+from utils.utils import openai_embedding
 from collections import defaultdict
 from tqdm import tqdm
 from loguru import logger
@@ -12,19 +12,21 @@ from loguru import logger
 NEO4J_URI = "neo4j://localhost:7687"
 NEO4J_USER = "neo4j"
 NEO4J_PASSWORD = "12345678"
-NEO4J_DATABASE = "service-list"
+NEO4J_DATABASE = "service-cim"
 
 LABEL_TO_PROPERTIES_DICT = {
     "Interface": [
         "name",
-        "description",
+        "llm_description",
         "standard_name",
-        "input_description",
-        "output_description",
+        # "input_description",
+        # "output_description",
     ],
     "Parameter": ["name", "chinese_name", "format", "description"],
     "Person": ["name"],
     "Service": ["name", "description", "standard_name", "standard_description"],
+    "CIMClass": ["name", "description"],
+    "CIMProperty": ["class", "property", "fullName"],
 }
 
 EMBEDDING_MODEL_NAME = "text-embedding-qwen3-embedding-8b"
@@ -91,7 +93,7 @@ def generate_and_write_embeddings(
     label_to_properties: dict,
     driver: Driver,
     database_name: str,
-    base_url: str,
+    embedding_base_url: str,
     model_name: str,
     batch_size: int,
 ):
@@ -129,7 +131,11 @@ def generate_and_write_embeddings(
 
             embeddings = np.array(
                 [
-                    lm_studio_embedding(base_url=base_url, model=model_name, text=text)
+                    openai_embedding(
+                        embedding_base_url=embedding_base_url,
+                        model=model_name,
+                        text=text,
+                    )
                     for text in texts
                 ]
             )
@@ -159,7 +165,7 @@ def generate_and_write_embeddings(
 
 
 def main():
-    base_url = os.getenv("LM_STUDIO_BASE_URL")
+    embedding_base_url = os.getenv("EMBED_BASE_URL")
     driver = connect_to_database(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD, NEO4J_DATABASE)
     try:
         nodes_by_label = fetch_all_nodes_by_label(driver, NEO4J_DATABASE)
@@ -168,7 +174,7 @@ def main():
             label_to_properties=LABEL_TO_PROPERTIES_DICT,
             driver=driver,
             database_name=NEO4J_DATABASE,
-            base_url=base_url,
+            embedding_base_url=embedding_base_url,
             model_name=EMBEDDING_MODEL_NAME,
             batch_size=BATCH_SIZE,
         )

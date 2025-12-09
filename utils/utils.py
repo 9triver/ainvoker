@@ -1,12 +1,13 @@
-import requests
-import json
 import pandas as pd
 import numpy as np
+import json
 
-from typing import Dict
+from typing import Dict, List, Optional, Any
 from pandas import DataFrame
 from os import getenv
 from openai import OpenAI
+from neo4j import Driver
+
 
 CATEGORY_COLS = ["接口一级分类", "接口开发单位", "开发负责人", "联系方式"]
 SERVICE_COLS = ["服务名称", "标准化服务名称", "服务描述", "标准化服务描述"]
@@ -101,7 +102,8 @@ def ask_llm(
     top_p: float = 0.7,
     temperature: float = 0.9,
 ):
-    client = OpenAI(api_key=getenv(api_key_name), base_url=base_url)
+    api_key = getenv(api_key_name) if api_key_name else None
+    client = OpenAI(api_key=api_key, base_url=base_url)
     response = (
         client.chat.completions.create(
             model=model,
@@ -118,7 +120,74 @@ def ask_llm(
     return response
 
 
-def lm_studio_embedding(base_url: str, model: str, text: str):
-    client = OpenAI(base_url=base_url, api_key="lm-studio")
+def openai_embedding(embedding_base_url: str, model: str, text: str):
+    client = OpenAI(base_url=embedding_base_url, api_key="fake_key")
     embedding = client.embeddings.create(input=text, model=model).data[0].embedding
     return embedding
+
+
+def get_property(
+    driver: Driver, database: str, label: str, id: str, property_name: str
+):
+    query = f"""
+    MATCH (n:{label} {{id: $id}})
+    RETURN n.{property_name} AS value
+    """
+    with driver.session(database=database) as session:
+        result = session.run(query, id=id).single()
+        return result["value"]
+
+
+def get_properties(
+    driver: Driver, database: str, label: str, id: str, property_names: List[str]
+) -> List[Optional[Any]]:
+    if not property_names:
+        return []
+
+    return_clause = ", ".join([f"n.{prop} AS {prop}" for prop in property_names])
+    query = f"""
+    MATCH (n:{label} {{id: $id}})
+    RETURN {return_clause}
+    """
+
+    with driver.session(database=database) as session:
+        result = session.run(query, id=id).single()
+        if result:
+            values = [result.get(prop) for prop in property_names]
+            return values
+        else:
+            return [None] * len(property_names)
+
+
+def has_property(
+    driver: Driver, database: str, label: str, id: str, property_name: str
+) -> bool:
+    query = f"""
+    MATCH (n:{label} {{id: $id}})
+    RETURN (n.{property_name} IS NOT NULL) AS has_prop
+    """
+    with driver.session(database=database) as session:
+        result = session.run(query, id=id).single()
+        return result["has_prop"] if result else False
+
+
+def set_property(
+    driver: Driver,
+    database: str,
+    label: str,
+    id: str,
+    property_name: str,
+    property_value,
+):
+    if property_value is None:
+        return None
+    if isinstance(property_value, (dict, list)):
+        property_value = json.dumps(property_value, ensure_ascii=False)
+    query = f"""
+    MATCH (n:{label} {{id: $id}})
+    SET n.{property_name} = $property_value
+    RETURN n.{property_name} AS new_value
+    """
+    with driver.session(database=database) as session:
+        result = session.run(query, id=id, property_value=property_value).single()
+        return result["new_value"] if result else None

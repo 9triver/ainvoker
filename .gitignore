@@ -90,3 +90,5 @@ htmlcov/
 # Project specific
 service_list/
 
+
+*.kt

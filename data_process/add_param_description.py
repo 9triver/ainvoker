@@ -1,7 +1,7 @@
 NEO4J_URI = "bolt://localhost:7687"
 NEO4J_USER = "neo4j"
 NEO4J_PASSWORD = "12345678"
-NEO4J_DATABASE = "service-list"
+NEO4J_DATABASE = "service-cim"
 
 import json, os
 from neo4j import GraphDatabase, Driver
