@@ -143,7 +143,7 @@ if __name__ == "__main__":
         uri=url,
         user=user,
         password=password,
-        database="service-cim",
+        database="service-cim-2025-12-16",
         embedding_base_url=os.getenv("EMBED_BASE_URL"),
         embedding_model="text-embedding-qwen3-embedding-8b",
         api_key_name="DEEPSEEK_API_KEY",

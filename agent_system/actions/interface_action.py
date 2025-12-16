@@ -59,6 +59,6 @@ class InterfaceAction(Action):
         )
 
         return state.update(
-            interfaces={interface_name: interface_description},
+            interface_history={interface_name: interface_description},
             parameters=interface_output_params,
         )

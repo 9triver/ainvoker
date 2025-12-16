@@ -14,14 +14,20 @@ if __name__ == "__main__":
         base_url="https://api.deepseek.com",
         id="deepseek-chat",
     )
+    # model = OpenAILike(
+    #     api_key=os.getenv("CHATGLM_API_KEY"),
+    #     base_url="https://open.bigmodel.cn/api/paas/v4/",
+    #     id="glm-4.6",
+    # )
 
     agent_system = AgentSystem(
         uri="bolt://localhost:7687",
         user="neo4j",
         password="12345678",
-        database="service-cim",
+        database="service-cim-2025-12-16",
         model=model,
         embedding_base_url=base_url,
+        mode="forward",
     )
     while True:
         question = prompt("User: ")

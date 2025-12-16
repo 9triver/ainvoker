@@ -99,7 +99,7 @@ def add_interface_param_descriptions(
         user=user,
         password=password,
         database=database,
-        base_url=embedding_base_url,
+        embedding_base_url=embedding_base_url,
         embedding_model=embedding_model,
     )
     with service_tool.driver.session(database=database) as session:
@@ -141,12 +141,24 @@ def rewrite_interface_descriptions(
         + "接口输入描述: {interface_input_description}\n"
         + "接口输出描述: {interface_output_description}\n"
         + "接口调用示例: {interface_example}\n"
-        + "结合上面信息，重写一个高质量的接口描述，要求如下:\n"
-        + "1. 描述清楚接口的功能、输入和输出\n"
-        + "2. 忽略无用的参数、繁琐的格式说明等等\n"
-        + "3. 参考模版: 本接口的功能是XXX。输入包括：有用参数及其描述。输出包括：有用参数及其描述。参数描述可以这样写：XXX: 其含义是XXX，其包括XXX属性，XXX其他参数\n"
-        + "重写的高质量接口描述: "
+        + "\n"
+        + "你的任务是：将以上接口信息，重写为【面向语义理解的高质量接口描述】。\n"
+        + "\n"
+        + "重写要求（必须严格遵守）：\n"
+        + "1. 只描述接口在业务和能力层面的语义，不做字段级或 JSON 结构说明。\n"
+        + "2. 聚焦核心业务数据，忽略与接口核心能力无关的技术性字段(例如响应状态/信息，分页信息等)。\n"
+        + "3. 对输入和输出参数进行**业务层面的逻辑分组和抽象**，而不是简单罗列。\n"
+        + "4. 对于输入和输出，以业务实体为单位进行描述，并在详细描述业务实体时使用具体参数进行补充\n"
+        + "5. **格式模板**：严格遵守以下格式进行输出：\n"
+        + "本接口的功能是XXX。\n"
+        + "输入包括：\n"
+        + "- [业务分组1名称]：使用[参数A]和[参数B]指定，其含义是XXX。\n"
+        + "- [业务分组2名称]：使用[参数C]表示，其包含[属性X]、[属性Y]等。\n"
+        + "输出包括：\n"
+        + "- [业务实体3]：是一个[数据结构](如设备集合)，其关键属性包括[属性P]、[属性Q]等。\n"
+        "现在开始重写接口描述：\n"
     )
+
     driver = GraphDatabase.driver(uri, auth=(user, password))
     with driver.session(database=database) as session:
         result = session.run("""MATCH (n:Interface) RETURN n.id AS id""")
@@ -207,7 +219,7 @@ if __name__ == "__main__":
         uri=url,
         user=user,
         password=password,
-        database="service-cim",
+        database="service-cim-2025-12-16",
         embedding_base_url=os.getenv("EMBED_BASE_URL"),
         embedding_model="text-embedding-qwen3-embedding-8b",
         api_key_name="DEEPSEEK_API_KEY",
@@ -218,7 +230,7 @@ if __name__ == "__main__":
         uri=url,
         user=user,
         password=password,
-        database="service-cim",
+        database="service-cim-2025-12-16",
         api_key_name="DEEPSEEK_API_KEY",
         base_url="https://api.deepseek.com",
         model="deepseek-chat",
