@@ -4,7 +4,7 @@ sys.path.append(os.getcwd())
 import numpy as np
 from neo4j import GraphDatabase, Driver
 from neo4j_haystack.document_stores import Neo4jDocumentStore
-from utils.utils import openai_embedding
+from utils.utils import openai_embedding, get_embedding_dimension
 from collections import defaultdict
 from tqdm import tqdm
 from loguru import logger
@@ -15,16 +15,16 @@ NEO4J_PASSWORD = "12345678"
 NEO4J_DATABASE = "service-cim-2025-12-16"
 
 LABEL_TO_PROPERTIES_DICT = {
-    # "Interface": [
-    #     "name",
-    #     "standard_name",
-    #     "llm_description",
-    # ],
-    # "Parameter": ["name", "chinese_name", "format", "description"],
-    # "Person": ["name"],
-    # "Service": ["name", "description", "standard_name", "standard_description"],
-    # "CIMClass": ["name", "description"],
-    # "CIMProperty": ["class", "property", "fullName"],
+    "Interface": [
+        "name",
+        "standard_name",
+        "llm_description",
+    ],
+    "Parameter": ["name", "chinese_name", "format", "description"],
+    "Person": ["name"],
+    "Service": ["name", "description", "standard_name", "standard_description"],
+    "CIMClass": ["name", "description"],
+    "CIMProperty": ["class", "property", "fullName"],
     "InputEntity": ["name", "llm_function_description"],
     "OutputEntity": ["name", "llm_function_description"],
 }
@@ -97,7 +97,9 @@ def generate_and_write_embeddings(
     model_name: str,
     batch_size: int,
 ):
+    embedding_dim = get_embedding_dimension(embedding_base_url=embedding_base_url)
     total_processed = 0
+
     for label, nodes_list in nodes_by_label.items():
         if label not in label_to_properties:
             continue
@@ -156,7 +158,7 @@ def generate_and_write_embeddings(
             index=f"{label}-embedding",
             node_label=label,
             progress_bar=True,
-            embedding_dim=4096,
+            embedding_dim=embedding_dim,
         )
 
     logger.info(

@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import json
+import requests
 
 from typing import Dict, List, Optional, Any
 from pandas import DataFrame
@@ -124,6 +125,15 @@ def openai_embedding(embedding_base_url: str, model: str, text: str):
     client = OpenAI(base_url=embedding_base_url, api_key="fake_key")
     embedding = client.embeddings.create(input=text, model=model).data[0].embedding
     return embedding
+
+
+def get_embedding_dimension(
+    embedding_base_url: str,
+):
+    embedding_base_url = f"{embedding_base_url.rstrip('/')}/model_dim"
+    response = requests.get(url=embedding_base_url)
+    data = response.json()
+    return data["embed_dim"]
 
 
 def get_property(
