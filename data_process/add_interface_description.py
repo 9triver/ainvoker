@@ -3,7 +3,6 @@ import sys, os
 sys.path.append(os.getcwd())
 from tqdm import tqdm
 from neo4j import GraphDatabase
-from tools.service import ServiceTools
 from utils.utils import (
     ask_llm,
     has_property,
@@ -88,26 +87,17 @@ def add_interface_param_descriptions(
     user: str,
     password: str,
     database: str,
-    embedding_base_url: str,
-    embedding_model: str,
     api_key_name: str,
     base_url: str,
     model: str,
 ):
-    service_tool = ServiceTools(
-        uri=uri,
-        user=user,
-        password=password,
-        database=database,
-        embedding_base_url=embedding_base_url,
-        embedding_model=embedding_model,
-    )
-    with service_tool.driver.session(database=database) as session:
+    driver = GraphDatabase.driver(uri, auth=(user, password))
+    with driver.session(database=database) as session:
         result = session.run("""MATCH (n:Interface) RETURN n.id AS id""")
-        interface_ids = [record["id"] for record in result]
+        interface_ids = [record["id"] for record in result].data()
         for interface_id in tqdm(interface_ids, desc="interface param descrition"):
             add_interface_param_description(
-                driver=service_tool.driver,
+                driver=driver,
                 database=database,
                 interface_id=interface_id,
                 param_type="input",
@@ -116,7 +106,7 @@ def add_interface_param_descriptions(
                 model=model,
             )
             add_interface_param_description(
-                driver=service_tool.driver,
+                driver=driver,
                 database=database,
                 interface_id=interface_id,
                 param_type="output",
@@ -162,7 +152,7 @@ def rewrite_interface_descriptions(
     driver = GraphDatabase.driver(uri, auth=(user, password))
     with driver.session(database=database) as session:
         result = session.run("""MATCH (n:Interface) RETURN n.id AS id""")
-        interface_ids = [record["id"] for record in result]
+        interface_ids = [record["id"] for record in result].data()
         for interface_id in tqdm(interface_ids, desc="interface descrition"):
             if has_property(
                 driver=driver,
@@ -220,8 +210,6 @@ if __name__ == "__main__":
         user=user,
         password=password,
         database="service-cim-2025-12-16",
-        embedding_base_url=os.getenv("EMBED_BASE_URL"),
-        embedding_model="text-embedding-qwen3-embedding-8b",
         api_key_name="DEEPSEEK_API_KEY",
         base_url="https://api.deepseek.com",
         model="deepseek-chat",

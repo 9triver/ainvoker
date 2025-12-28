@@ -1,4 +1,4 @@
-agno==2.3.6
+agno==2.3.19
 haystack-ai==2.20.0
 neo4j_haystack==2.2.1
 neo4j==6.0.3

@@ -19,7 +19,7 @@ def get_parameter_ids(driver: Driver, database: str):
             WITH n
             RETURN n.id AS id
             """
-        )
+        ).data()
         param_ids = [record["id"] for record in result]
         return param_ids
 
@@ -43,7 +43,7 @@ def get_interfaces_description_to_param(driver: Driver, database: str, param_id:
         result = session.run(
             """
             MATCH (p:Parameter {id: $param_id})<-[:OUTPUT_FROM_INTERFACE]-(i:Interface)
-            RETURN i.description as description
+            RETURN i.description AS description
             """,
             param_id=param_id,
         ).data()
@@ -55,7 +55,7 @@ def get_interfaces_description_from_param(driver: Driver, database: str, param_i
         result = session.run(
             """
             MATCH (p:Parameter {id: $param_id})-[:INPUT_TO_INTERFACE]->(i:Interface)
-            RETURN i.description as description
+            RETURN i.description AS description
             """,
             param_id=param_id,
         ).data()

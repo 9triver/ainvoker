@@ -15,22 +15,22 @@ NEO4J_PASSWORD = "12345678"
 NEO4J_DATABASE = "service-cim-2025-12-16"
 
 LABEL_TO_PROPERTIES_DICT = {
-    "Interface": [
-        "name",
-        "llm_description",
-        "standard_name",
-        # "input_description",
-        # "output_description",
-    ],
-    "Parameter": ["name", "chinese_name", "format", "description"],
-    "Person": ["name"],
-    "Service": ["name", "description", "standard_name", "standard_description"],
-    "CIMClass": ["name", "description"],
-    "CIMProperty": ["class", "property", "fullName"],
+    # "Interface": [
+    #     "name",
+    #     "standard_name",
+    #     "llm_description",
+    # ],
+    # "Parameter": ["name", "chinese_name", "format", "description"],
+    # "Person": ["name"],
+    # "Service": ["name", "description", "standard_name", "standard_description"],
+    # "CIMClass": ["name", "description"],
+    # "CIMProperty": ["class", "property", "fullName"],
+    "InputEntity": ["name", "llm_function_description"],
+    "OutputEntity": ["name", "llm_function_description"],
 }
 
-EMBEDDING_MODEL_NAME = "text-embedding-qwen3-embedding-8b"
-BATCH_SIZE = 32
+EMBEDDING_MODEL_NAME = "tencent-kalm-embedding-gemma3-12b-2511"
+BATCH_SIZE = 1
 
 
 def connect_to_database(uri: str, user: str, password: str, database: str):

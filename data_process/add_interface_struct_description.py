@@ -1,15 +1,21 @@
-import sys, os, json
+import sys, os, json, random
 
 sys.path.append(os.getcwd())
 from tqdm import tqdm
-from tools.service import ServiceTools
-from utils.utils import ask_llm, has_property, get_property, set_property
+from neo4j import GraphDatabase
+from utils.utils import (
+    ask_llm,
+    has_property,
+    get_property,
+    get_properties,
+    set_property,
+)
 
 from json_repair import loads
 from loguru import logger
 
 
-def convert_interface_param_description_to_struct(
+def convert_interface_llm_description_to_struct(
     driver,
     database: str,
     interface_id: str,
@@ -18,7 +24,7 @@ def convert_interface_param_description_to_struct(
     base_url: str,
     model: str,
 ):
-    property_name = f"{param_type}_params"
+    property_name = f"{param_type}_entities"
     if has_property(
         driver,
         database=database,
@@ -35,34 +41,29 @@ def convert_interface_param_description_to_struct(
         id=interface_id,
         property_name="name",
     )
-    example = get_property(
+    llm_description = get_property(
         driver=driver,
         database=database,
         label="Interface",
         id=interface_id,
-        property_name="example",
-    )
-    param_description = get_property(
-        driver=driver,
-        database=database,
-        interface_id=interface_id,
-        property_name=f"{param_type}_description",
+        property_name=f"llm_description",
     )
     require_prompt = """要求：
-    1. 忽略没有具体含义的参数，关注可以后续利用的参数实体。
-    2. 将参数描述中的实体提取为下面的json结构：
+    1. 将接口描述中的实体提取为下面的json结构：
     {
-        "中文参数名(english_param_name): \"param_description\",
+        \"业务实体名\": \"业务实体描述\",
         ...
     }
+    
+    2. 以业务实体为单位进行描述，并在详细描述业务实体时使用具体参数进行补充。
+    3. 输入/输出描述中的业务实体已经经过了**业务层面的逻辑分组和抽象**，不要再次拆分开来，将输入/输出描述切分后照抄或转述即可。
+    4. 业务实体名和业务实体描述 **必须是文本字符串**，禁止嵌套字符串，只能有一层键值对。
     """
     if param_type == "input":
-        param_name = "输入参数描述"
-        system_prompt = f"根据上面提供的接口的相关信息，根据要求将**输入参数**的描述结构化。\n{require_prompt}\n直接返回接口输入描述的json："
+        system_prompt = f"根据上面提供的接口的相关信息，根据要求将**输入描述**结构化，**忽略输出描述**。\n{require_prompt}\n直接返回接口输入描述的json："
     else:
-        param_name = "输出参数描述"
-        system_prompt = f"根据上面提供的接口的相关信息，根据要求将**输出参数**的描述结构化。\n{require_prompt}\n直接返回接口输出描述的json："
-    interface_infomation = f"一、接口名称: {interface_name.strip()}\n\n二、接口调用示例: {example.strip()}\n\n三、{param_name}: {param_description.strip()}"
+        system_prompt = f"根据上面提供的接口的相关信息，根据要求将**输出描述**结构化，**忽略输出描述**。\n{require_prompt}\n直接返回接口输出描述的json："
+    interface_infomation = f"一、接口名称: {interface_name.strip()}\n\n二、接口描述{llm_description.strip()}"
 
     user_prompt = "{interface_infomation}\n{system_prompt}".format(
         interface_infomation=interface_infomation,
@@ -81,42 +82,54 @@ def convert_interface_param_description_to_struct(
     if not isinstance(parameters, dict):
         return None
     logger.info(
-        f"\nparameters:\n{json.dumps(obj=parameters, ensure_ascii=False, indent=2)}"
+        f"\nentities:\n{json.dumps(obj=parameters, ensure_ascii=False, indent=2)}"
     )
     return set_property(
         driver=driver,
         database=database,
-        interface_id=interface_id,
+        label="Interface",
+        id=interface_id,
         property_name=property_name,
         property_value=parameters,
     )
 
 
-def convert_interface_param_descriptions_to_struct(
+def convert_interface_llm_descriptions_to_struct(
     uri: str,
     user: str,
     password: str,
     database: str,
-    embedding_base_url: str,
-    embedding_model: str,
     api_key_name: str,
     base_url: str,
     model: str,
 ):
-    service_tool = ServiceTools(
-        uri=uri,
-        user=user,
-        password=password,
-        database=database,
-        embedding_base_url=embedding_base_url,
-        embedding_model=embedding_model,
-    )
-    with service_tool.driver.session(database=database) as session:
-        result = session.run("""MATCH (n:Interface) RETURN n.id AS id""")
+    driver = GraphDatabase.driver(uri, auth=(user, password))
+    with driver.session(database=database) as session:
+        result = session.run("""MATCH (n:Interface) RETURN n.id AS id""").data()
         interface_ids = [record["id"] for record in result]
         for interface_id in tqdm(interface_ids, desc="interface param descrition"):
-            convert_interface_param_description_to_struct(
-                driver=service_tool.driver,
+
+            llm_description: str = get_property(
+                driver=driver,
+                database=database,
+                label="Interface",
+                id=interface_id,
+                property_name=f"llm_description",
+            )
+            llm_function_description = llm_description.split("输入包括", 1)[0].strip()
+            if not llm_function_description:
+                logger.info(llm_description)
+            set_property(
+                driver=driver,
+                database=database,
+                label="Interface",
+                id=interface_id,
+                property_name="llm_function_description",
+                property_value=llm_function_description,
+            )
+
+            convert_interface_llm_description_to_struct(
+                driver=driver,
                 database=database,
                 interface_id=interface_id,
                 param_type="input",
@@ -124,8 +137,8 @@ def convert_interface_param_descriptions_to_struct(
                 base_url=base_url,
                 model=model,
             )
-            convert_interface_param_description_to_struct(
-                driver=service_tool.driver,
+            convert_interface_llm_description_to_struct(
+                driver=driver,
                 database=database,
                 interface_id=interface_id,
                 param_type="output",
@@ -135,18 +148,82 @@ def convert_interface_param_descriptions_to_struct(
             )
 
 
+def write_entities_into_database(
+    uri: str,
+    user: str,
+    password: str,
+    database: str,
+):
+    driver = GraphDatabase.driver(uri, auth=(user, password))
+    with driver.session(database=database) as session:
+        result = session.run("""MATCH (n:Interface) RETURN n.id AS id""").data()
+        interface_ids = [record["id"] for record in result]
+        for interface_id in tqdm(interface_ids):
+            input_entities, output_entities, llm_function_description = get_properties(
+                driver=driver,
+                database=database,
+                label="Interface",
+                id=interface_id,
+                property_names=[
+                    "input_entities",
+                    "output_entities",
+                    "llm_function_description",
+                ],
+            )
+            input_entities = loads(json_str=input_entities)
+            for entity_name, entity_description in input_entities.items():
+                session.run(
+                    """
+                    MATCH (i:Interface {id: $interface_id})
+                    MERGE (e:InputEntity {name: $name})
+                    ON CREATE SET
+                        e.id = $entity_id,
+                        e.description = $description,
+                        e.interface_llm_function_description = $interface_llm_function_description
+                    MERGE (e)-[:INPUT_ENTITY]->(i)
+                    """,
+                    interface_id=interface_id,
+                    name=entity_name,
+                    description=entity_description,
+                    interface_llm_function_description=llm_function_description,
+                    entity_id=f"Entity_{random.randint(10_000_000, 99_999_999)}",
+                )
+            output_entities = loads(json_str=output_entities)
+            for entity_name, entity_description in output_entities.items():
+                session.run(
+                    """
+                    MATCH (i:Interface {id: $interface_id})
+                    MERGE (e:OutputEntity {name: $name})
+                    ON CREATE SET
+                        e.id = $entity_id,
+                        e.description = $description,
+                        e.interface_llm_function_description = $interface_llm_function_description
+                    MERGE (i)-[:OUTPUT_ENTITY]->(e)
+                    """,
+                    interface_id=interface_id,
+                    name=entity_name,
+                    description=entity_description,
+                    interface_llm_function_description=llm_function_description,
+                    entity_id=f"Entity_{random.randint(10_000_000, 99_999_999)}",
+                )
+
+
 if __name__ == "__main__":
     url = "bolt://localhost:7687"
     user = "neo4j"
     password = "12345678"
-    convert_interface_param_descriptions_to_struct(
+    # convert_interface_llm_descriptions_to_struct(
+    #     uri=url,
+    #     user=user,
+    #     password=password,
+    #     database="service-cim-2025-12-16",
+    #     api_key_name="MIMO_API_KEY",
+    #     base_url="https://api.xiaomimimo.com/v1",
+    #     model="mimo-v2-flash",
+    # )
+    write_entities_into_database(
         uri=url,
         user=user,
         password=password,
         database="service-cim-2025-12-16",
-        embedding_base_url=os.getenv("EMBED_BASE_URL"),
-        embedding_model="text-embedding-qwen3-embedding-8b",
-        api_key_name="DEEPSEEK_API_KEY",
-        base_url="https://api.deepseek.com",
-        model="deepseek-chat",
     )

@@ -1,16 +1,18 @@
-import os, sys
+import os, sys, json
 
 sys.path.append(os.getcwd())
 
-import numpy as np
-from typing import List, Dict, Union, Any
+from typing import List, Dict, Union, Any, Literal
+from collections import defaultdict
 from cn2an import an2cn
+from tqdm import tqdm
 
 from agno.tools import Toolkit
 from neo4j import GraphDatabase
 from haystack import Document
 from neo4j_haystack.document_stores import Neo4jDocumentStore
-from utils.utils import openai_embedding
+from sklearn.metrics.pairwise import cosine_similarity
+from utils.utils import openai_embedding, get_properties, get_property
 from loguru import logger
 
 
@@ -23,7 +25,8 @@ class ServiceTools(Toolkit):
         database: str,
         embedding_base_url: str,
         embedding_model: str,
-        enable_search_similar_interfaces: bool = False,
+        enable_search_similar_input_entities: bool = False,
+        enable_search_similar_output_entities: bool = False,
         enable_search_interface_by_name: bool = False,
         enable_search_similar_cim_classes: bool = False,
         all: bool = False,
@@ -50,16 +53,20 @@ class ServiceTools(Toolkit):
             logger.error(f"Failed to connect to Neo4j: {e}")
             raise
 
+        # self.entity_scores = self.compute_entity_internal_scores()
+
         tools: List[Any] = []
-        if all or enable_search_similar_interfaces:
-            tools.append(self.find_similar_interfaces)
+        if all or enable_search_similar_input_entities:
+            tools.append(self.search_similar_input_entities)
+        if all or enable_search_similar_output_entities:
+            tools.append(self.search_similar_output_entities)
         if all or enable_search_interface_by_name:
-            tools.append(self.find_interface_by_name)
+            tools.append(self.search_interface_by_name)
         if all or enable_search_similar_cim_classes:
-            tools.append(self.find_similar_cim_classes)
+            tools.append(self.search_similar_cim_classes)
         super().__init__(name="service_tools", tools=tools, **kwargs)
 
-    def _find_similar_nodes(
+    def _search_similar_nodes(
         self,
         text: str,
         node_label: str,
@@ -85,6 +92,24 @@ class ServiceTools(Toolkit):
             query_embedding=entity_embedding, top_k=top_k
         )
         return documents
+
+    def _get_properties(self, label: str, id: str, property_names: List[str]):
+        return get_properties(
+            driver=self.driver,
+            database=self.database,
+            label=label,
+            id=id,
+            property_names=property_names,
+        )
+
+    def _get_property(self, label: str, id: str, property_name: str):
+        return get_property(
+            driver=self.driver,
+            database=self.database,
+            label=label,
+            id=id,
+            property_name=property_name,
+        )
 
     def _get_interface_details(
         self, interface_ids: Union[str, List[str]]
@@ -140,42 +165,81 @@ class ServiceTools(Toolkit):
                 interfaces.append(interface)
             return interfaces
 
-    def find_similar_interfaces(
+    def _search_similar_entities(
         self,
-        task_description: str,
+        type: Literal["Input", "Output"],
+        query_text: str,
+        top_k: int = 3,
+    ) -> str:
+        entities = self._search_similar_nodes(
+            text=query_text, node_label=f"{type}Entity", top_k=top_k
+        )
+
+        entity_contents = []
+        for index, entity in enumerate(entities, 1):
+            entity_id = entity.id
+            entity_name = entity.meta["name"]
+            entity_description = entity.meta["description"]
+            with self.driver.session(database=self.database) as session:
+                result = session.run(
+                    """
+                    MATCH (e {id: $entity_id})-[r:INPUT_ENTITY|OUTPUT_ENTITY]-(i:Interface)
+                    RETURN DISTINCT i.id AS id, i.name AS name, i.llm_function_description AS description
+                    """,
+                    entity_id=entity_id,
+                ).data()
+                interface_id = result[0]["id"]
+                interface_name = result[0]["name"]
+                interface_description = result[0]["description"]
+
+                entity_content = {
+                    "序号": index,
+                    "实体id": entity_id,
+                    "实体名称": entity_name,
+                    "实体描述": entity_description,
+                    "相关接口id": interface_id,
+                    "相关接口名称": interface_name,
+                    "相关接口描述": interface_description,
+                }
+                entity_contents.append(entity_content)
+
+        return json.dumps(obj=entity_contents, ensure_ascii=False, indent=2)
+
+    def search_similar_output_entities(
+        self,
+        query_text: str,
         top_k: int = 3,
     ) -> str:
         """
-        根据用户提供的任务描述，查找内容相似的服务接口。
+        根据用户提供的查询文本，查找相似的输出业务实体和输出该实体接口id。
 
         Args:
-            task_description (str): 用户的任务描述（用于匹配服务接口）。
-            top_k (int): 返回的相关服务数量，默认为 3。
+            query_text (str): 用户的查询文本。
+            top_k (int): 返回的相关业务实体数量，默认为 3。
         """
-        interfaces = self._find_similar_nodes(
-            text=task_description, node_label="Interface", top_k=top_k
+        return self._search_similar_entities(
+            type="Output", query_text=query_text, top_k=top_k
         )
-        interface_ids = [interface.id for interface in interfaces]
-        interface_details = self._get_interface_details(interface_ids=interface_ids)
 
-        interface_contents = []
-        for index, interface_detail in enumerate(interface_details):
-            interface_id = interface_ids[index]
-            name = interface_detail["name"]
-            standard_name = interface_detail["standard_name"]
-            llm_description = interface_detail["llm_description"]
-            interface_content = (
-                f"({an2cn(index+1)}) {name}/{standard_name}\n"
-                + f"接口id: {interface_id}\n"
-                + f"接口描述: {llm_description}"
-            )
-            interface_contents.append(interface_content)
-
-        return "\n".join(interface_contents)
-
-    def find_interface_by_name(self, name: str) -> str:
+    def search_similar_input_entities(
+        self,
+        query_text: str,
+        top_k: int = 3,
+    ) -> str:
         """
-        根据用户提供的接口名，查找目标服务接口的信息。
+        根据用户提供的查询文本，查找内容相似的输入业务实体。
+
+        Args:
+            query_text (str): 用户的查询文本。
+            top_k (int): 返回的相关业务实体数量，默认为 3。
+        """
+        return self._search_similar_entities(
+            type="Input", query_text=query_text, top_k=top_k
+        )
+
+    def search_interface_by_name(self, name: str) -> str:
+        """
+        根据接口名称，查找目标服务接口的信息。
         Args:
             name (str): 接口名称。
         """
@@ -186,8 +250,8 @@ class ServiceTools(Toolkit):
                 RETURN i.id as id
                 """,
                 name=name,
-            )
-            interface_id = result.data()[0]["id"]
+            ).data()
+            interface_id = result[0]["id"]
             interface_detail = self._get_interface_details(interface_ids=interface_id)[
                 0
             ]
@@ -255,7 +319,7 @@ class ServiceTools(Toolkit):
             logger.debug(f"CIM class details found: {len(classes)}")
             return classes
 
-    def find_similar_cim_classes(
+    def search_similar_cim_classes(
         self,
         description: str,
         top_k: int = 3,
@@ -264,14 +328,14 @@ class ServiceTools(Toolkit):
         根据自然语言描述，查找最相似的 CIMClass 并返回详细信息文本。
 
         实现要点：
-        - 使用 `_find_similar_nodes` 对 `CIMClass` 节点做向量检索；
+        - 使用 `_search_similar_nodes` 对 `CIMClass` 节点做向量检索；
         - 从返回的 `Document` 中稳健提取可用于查询 Neo4j 的标识（优先 `meta.name`，其次 `meta.id`，再 `content`，最后 `id`）；
         - 兼容文档 id 可能为 `internal id`、或带前缀的字符串（例如 `4:...`），将尝试同时提交原值和去掉冒号后的部分作为候选；
         - 调用 `get_cim_class_details` 获取完整节点信息并格式化输出。
         """
 
         # 1. 向量检索得到候选文档
-        cim_classes = self._find_similar_nodes(
+        cim_classes = self._search_similar_nodes(
             text=description, node_label="CIMClass", top_k=top_k
         )
 

@@ -191,3 +191,11 @@ def set_property(
     with driver.session(database=database) as session:
         result = session.run(query, id=id, property_value=property_value).single()
         return result["new_value"] if result else None
+
+
+def flatten(lst):
+    for x in lst:
+        if isinstance(x, list):
+            yield from flatten(x)
+        else:
+            yield x
