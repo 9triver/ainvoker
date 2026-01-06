@@ -2,14 +2,25 @@ import sys, os
 
 sys.path.append(os.getcwd())
 
+from typing import List
+from pydantic import BaseModel, Field
 from agno.models.base import Model
 from agno.agent import Agent, RunOutput
 from agno.utils.pprint import pprint_run_response
-from json_repair import loads
 
 from tools.service import ServiceTools
 from .world_state import WorldState
 from .actions import InterfaceAction
+
+
+class SearchResult(BaseModel):
+    interface_ids: List[str] = Field(
+        ..., description="List of interface IDs that can help solve the user's problem"
+    )
+    requied_entities: List[str] = Field(
+        ...,
+        description="List of descriptions for business entities that need to be supplemented or identified next",
+    )
 
 
 class AgentSystem:
@@ -19,14 +30,15 @@ class AgentSystem:
         user: str,
         password: str,
         database: str,
-        model: Model,
+        search_model: Model,
+        summarize_model: Model,
         embedding_base_url: str,
     ) -> None:
         self.interface_action = InterfaceAction(
             uri=uri, user=user, password=password, database=database
         )
         self.searcher = AgentSystem.init_searcher(
-            model=model,
+            model=search_model,
             uri=uri,
             user=user,
             password=password,
@@ -34,7 +46,7 @@ class AgentSystem:
             embedding_base_url=embedding_base_url,
         )
         self.summarizer = AgentSystem.init_summarizer(
-            model=model,
+            model=summarize_model,
         )
         return
 
@@ -51,9 +63,9 @@ class AgentSystem:
                 debug_mode=True,
             )
             pprint_run_response(response, markdown=True)
-            response_obj = loads(response.content)
-            interface_ids = response_obj["interface_ids"]
-            requied_entities = response_obj["requied_entities"]
+            search_result: SearchResult = response.content
+            interface_ids = search_result.interface_ids
+            requied_entities = search_result.requied_entities
 
             world_state = self.interface_action.update_by_interface_ids(
                 state=WorldState(
@@ -101,20 +113,21 @@ class AgentSystem:
                     password=password,
                     database=database,
                     embedding_base_url=embedding_base_url,
-                    embedding_model="tencent-kalm-embedding-gemma3-12b-2511",
+                    embedding_model="nvidia-llama-embed-nemotron-8b",
                     enable_search_similar_output_entities=True,
                 )
             ],
             role="分析用户问题和候选接口，继续搜索所需的业务实体和接口",
             instructions=[
-                "1. 我提供了用户原始问题和候选接口信息。根据下面的思路去寻找接下来你需要的业务实体和接口信息:",
-                "1.1 生成需要的业务实体的描述，使用工具进行搜索与描述相关的业务实体。推荐多尝试不同描述来搜索。",
-                "1.2 如果多次搜索尝试后仍未找到有助于直接或间接解决用户问题的业务实体，填写需要业务实体(requied_entities)列表。",
-                "2. 根据我提供的候选接口信息，和目标业务实体的接口信息，保留所有有助于解决用户问题的接口。",
-                "3. JSON格式: {'interface_ids': [...], 'requied_entities': [...]}",
-                "3.1 interface_ids(list[str]): 所有有助于解决用户问题的接口ID列表，在更合适的接口出现之前，可以接受相对不完美的有用接口。",
-                "3.2 requied_entities(list[str]): 需要我补充的、以及接下来需要寻找的业务实体的描述列表。",
+                "1. 我提供了用户原始问题和候选接口信息。",
+                "2. 你可以写一个文本语句来描述需要的业务实体，然后使用工具去搜索。",
+                "3. 分析我提供的候选接口信息，和目标业务实体的接口信息，保留所有有助于解决用户问题的接口。",
+                # "3. JSON格式: {'interface_ids': [...], 'requied_entities': [...]}",
+                # "3.1 interface_ids(list[str]): 所有有助于解决用户问题的接口ID列表。",
+                # "3.2 requied_entities(list[str]): 需要我补充的、以及接下来需要寻找的业务实体的描述列表。",
             ],
+            output_schema=SearchResult,
+            use_json_mode=True,
             markdown=True,
         )
 

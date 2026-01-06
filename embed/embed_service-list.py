@@ -24,12 +24,12 @@ LABEL_TO_PROPERTIES_DICT = {
     "Person": ["name"],
     "Service": ["name", "description", "standard_name", "standard_description"],
     "CIMClass": ["name", "description"],
-    "CIMProperty": ["class", "property", "fullName"],
+    # "CIMProperty": ["class", "property", "fullName"],
     "InputEntity": ["name", "llm_function_description"],
     "OutputEntity": ["name", "llm_function_description"],
 }
 
-EMBEDDING_MODEL_NAME = "tencent-kalm-embedding-gemma3-12b-2511"
+EMBEDDING_MODEL_NAME = "nvidia-llama-embed-nemotron-8b"
 BATCH_SIZE = 1
 
 

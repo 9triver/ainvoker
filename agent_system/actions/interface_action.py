@@ -30,50 +30,19 @@ class InterfaceAction:
 
     def get_interface_by_interface_id(self, interface_id: str):
         with self.driver.session(database=self.database) as session:
-            result = session.run(
+            record = session.run(
                 """
                 MATCH (i:Interface {id: $interface_id})
                 RETURN i.id AS id, i.name AS name, i.llm_description AS llm_description
                 """,
                 interface_id=interface_id,
-            ).data()
+            ).single()
+            if record is None:
+                return None
             return {
-                "id": result[0]["id"],
-                "name": result[0]["name"],
-                "llm_description": result[0]["llm_description"],
-            }
-
-    def get_entities_by_interface_id(self, interface_id: str):
-        with self.driver.session(database=self.database) as session:
-            result = session.run(
-                """
-                MATCH (i:Interface {id: $interface_id})-[r:INPUT_ENTITY]-(e)
-                RETURN DISTINCT
-                    e.id AS id,
-                    e.name AS name,
-                    e.description AS description
-                """,
-                interface_id=interface_id,
-            ).data()
-            input_entities = {
-                record["name"]: record["description"] for record in result
-            }
-            result = session.run(
-                """
-                MATCH (i:Interface {id: $interface_id})-[r:OUTPUT_ENTITY]-(e)
-                RETURN DISTINCT
-                    e.id AS id,
-                    e.name AS name,
-                    e.description AS description
-                """,
-                interface_id=interface_id,
-            ).data()
-            output_entities = {
-                record["name"]: record["description"] for record in result
-            }
-            return {
-                "input_entities": input_entities,
-                "output_entities": output_entities,
+                "id": record["id"],
+                "name": record["name"],
+                "llm_description": record["llm_description"],
             }
 
     def update_by_interface_ids(
@@ -85,10 +54,12 @@ class InterfaceAction:
         new_obtained_entities: List[str] = state.obtained_entities
         new_required_entities: List[str] = []
         for interface_id in interface_ids:
-            # interface
             interface_info = self.get_interface_by_interface_id(
                 interface_id=interface_id
             )
+            if not interface_info:
+                continue
+
             interface_calls.append(
                 {
                     "id": interface_info["id"],
@@ -96,19 +67,6 @@ class InterfaceAction:
                     "description": interface_info["llm_description"],
                 }
             )
-
-            # input/output entities
-            # entity_info = self.get_entities_by_interface_id(interface_id=interface_id)
-            # input_entities = [
-            #     f"{name}: {desc}"
-            #     for name, desc in entity_info["input_entities"].items()
-            # ]
-            # output_entities = [
-            #     f"{name}: {desc}"
-            #     for name, desc in entity_info["output_entities"].items()
-            # ]
-            # new_obtained_entities.extend(output_entities)
-            # new_required_entities.extend(input_entities)
 
         return state.update(
             interface_history=interface_calls,
