@@ -92,3 +92,4 @@ service_list/
 
 
 *.kt
+tmp*.py

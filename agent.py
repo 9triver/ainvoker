@@ -30,7 +30,7 @@ if __name__ == "__main__":
         uri="bolt://localhost:7687",
         user="neo4j",
         password="12345678",
-        database="service-cim-2025-12-16",
+        database="service-cim-2026-01-10",
         search_model=glm_4_7_model,
         summarize_model=deepseek_chat_model,
         embedding_base_url=base_url,
@@ -38,4 +38,4 @@ if __name__ == "__main__":
     while True:
         question = prompt("User: ")
         anwser = agent_system.response(question=question)
-        # print_formatted_text(anwser)
+        print_formatted_text(anwser)

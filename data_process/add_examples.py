@@ -10,7 +10,7 @@ from loguru import logger
 NEO4J_URI = "bolt://localhost:7687"
 NEO4J_USER = "neo4j"
 NEO4J_PASSWORD = "12345678"
-NEO4J_DATABASE = "service-cim-2025-12-16"
+NEO4J_DATABASE = "service-cim-2026-01-10"
 
 
 def extract_interfaces(api_file: str):

@@ -12,7 +12,7 @@ from loguru import logger
 NEO4J_URI = "neo4j://localhost:7687"
 NEO4J_USER = "neo4j"
 NEO4J_PASSWORD = "12345678"
-NEO4J_DATABASE = "service-cim-2025-12-16"
+NEO4J_DATABASE = "service-cim-2026-01-10"
 
 LABEL_TO_PROPERTIES_DICT = {
     "Interface": [
@@ -20,11 +20,8 @@ LABEL_TO_PROPERTIES_DICT = {
         "standard_name",
         "llm_description",
     ],
-    "Parameter": ["name", "chinese_name", "format", "description"],
-    "Person": ["name"],
-    "Service": ["name", "description", "standard_name", "standard_description"],
     "CIMClass": ["name", "description"],
-    # "CIMProperty": ["class", "property", "fullName"],
+    "CIMProperty": ["class", "property", "fullName"],
     "InputEntity": ["name", "llm_function_description"],
     "OutputEntity": ["name", "llm_function_description"],
 }
@@ -39,19 +36,23 @@ def connect_to_database(uri: str, user: str, password: str, database: str):
     logger.info(f"Connected to database: {database}")
     return driver
 
-
 def fetch_all_nodes_by_label(driver, database_name):
     nodes_by_label = defaultdict(list)
-    query = "MATCH (n) RETURN n, elementId(n) AS internal_id"
+    query = "MATCH (n) WHERE size(labels(n)) > 0 RETURN n, elementId(n) AS internal_id"
     with driver.session(database=database_name) as session:
         result = session.run(query)
         for record in result:
             node = record["n"]
             internal_id = record["internal_id"]
-            label = list(node.labels)[0]
+            try:
+                label = next(iter(node.labels))
+            except StopIteration:
+                continue
             properties = dict(node)
             properties["_neo4j_internal_id"] = internal_id
+            
             nodes_by_label[label].append(properties)
+            
     return nodes_by_label
 
 

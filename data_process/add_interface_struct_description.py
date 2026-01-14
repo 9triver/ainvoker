@@ -216,7 +216,7 @@ if __name__ == "__main__":
     #     uri=url,
     #     user=user,
     #     password=password,
-    #     database="service-cim-2025-12-16",
+    #     database="service-cim-2026-01-10",
     #     api_key_name="MIMO_API_KEY",
     #     base_url="https://api.xiaomimimo.com/v1",
     #     model="mimo-v2-flash",
@@ -225,5 +225,5 @@ if __name__ == "__main__":
         uri=url,
         user=user,
         password=password,
-        database="service-cim-2025-12-16",
+        database="service-cim-2026-01-10",
     )
